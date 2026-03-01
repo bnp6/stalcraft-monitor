@@ -20,7 +20,7 @@ export default async (request) => {
     ];
 
     const TIME_WINDOWS = [
-      { name: "ТЕСТ 23:02-23:08", start: "23:02", end: "23:08", days: [0] },
+      { name: "ТЕСТ 23:12-23:15", start: "23:12", end: "23:15", days: [0] },
       { name: "20:00-20:28", start: "20:00", end: "20:28", days: [4, 5, 6, 0] },
       { name: "20:30-20:58", start: "20:30", end: "20:58", days: [4, 5, 6, 0] },
       { name: "21:00-21:28", start: "21:00", end: "21:28", days: [4, 5, 6, 0] }
