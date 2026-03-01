@@ -1,0 +1,5 @@
+{
+  "name": "stalcraft-grenade-monitor",
+  "version": "1.0.0",
+  "description": "Мониторинг гранат Stalcraft через Netlify Functions"
+}
