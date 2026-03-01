@@ -1,5 +1,8 @@
 {
   "name": "stalcraft-grenade-monitor",
   "version": "1.0.0",
-  "description": "Мониторинг гранат Stalcraft через Netlify Functions"
+  "description": "Мониторинг гранат Stalcraft через Netlify Functions",
+  "dependencies": {
+    "@netlify/blobs": "^8.0.0"
+  }
 }
