@@ -50,30 +50,59 @@ export default async (request) => {
       }));
     }
 
-    // Получаем статистику игроков
-    const stats = {};
-    for (const player of PLAYERS) {
-      try {
-        const url = `https://eapi.stalcraft.net/${CONFIG.region}/character/${encodeURIComponent(player)}`;
-        const response = await fetch(url, {
-          headers: {
-            'Client-Id': CONFIG.clientId,
-            'Client-Secret': CONFIG.clientSecret
-          }
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        let greThr = 0;
-        if (data?.statistics) {
-          const stat = data.statistics.find(s => s.id === 'gre-thr');
-          greThr = stat?.value || 0;
+    // Получаем статистику игроков через правильный эндпоинт
+const stats = {};
+for (const player of PLAYERS) {
+  try {
+    // Пробуем разные варианты эндпоинтов
+    let response = null;
+    let data = null;
+    
+    // Вариант 1: Основной эндпоинт для профиля
+    const url1 = `https://eapi.stalcraft.net/${CONFIG.region}/character/${encodeURIComponent(player)}/profile`;
+    response = await fetch(url1, {
+      headers: {
+        'Client-Id': CONFIG.clientId,
+        'Client-Secret': CONFIG.clientSecret
+      }
+    });
+    
+    if (response.ok) {
+      data = await response.json();
+    } else {
+      // Вариант 2: Запасной вариант
+      const url2 = `https://eapi.stalcraft.net/${CONFIG.region}/character/${encodeURIComponent(player)}`;
+      response = await fetch(url2, {
+        headers: {
+          'Client-Id': CONFIG.clientId,
+          'Client-Secret': CONFIG.clientSecret
         }
-        stats[player] = greThr;
-      } catch (error) {
-        console.error(`Ошибка ${player}: ${error.message}`);
-        stats[player] = 0;
+      });
+      if (response.ok) {
+        data = await response.json();
       }
     }
+    
+    // Извлекаем статистику гранат
+    let greThr = 0;
+    if (data?.statistics) {
+      // statistics может быть массивом или объектом
+      if (Array.isArray(data.statistics)) {
+        const stat = data.statistics.find(s => s?.id === 'gre-thr' || s?.statId === 'gre-thr');
+        greThr = stat?.value || stat?.statValue || 0;
+      } else if (typeof data.statistics === 'object') {
+        greThr = data.statistics['gre-thr'] || data.statistics.gre_thr || 0;
+      }
+    }
+    
+    stats[player] = greThr;
+    console.log(`✅ ${player}: ${greThr}`);
+    
+  } catch (error) {
+    console.error(`❌ ${player}: ${error.message}`);
+    stats[player] = 0;
+  }
+}
 
     // ===== ЗАГРУЖАЕМ СОСТОЯНИЕ ИЗ ХРАНИЛИЩА =====
     let state = await store.get('state', { type: 'json' }) || {
