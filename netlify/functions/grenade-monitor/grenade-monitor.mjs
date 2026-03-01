@@ -10,26 +10,29 @@ export default async (request) => {
       region: "ru"
     };
 
+    // ПОЛНЫЙ список игроков (33 человека)
     const PLAYERS = [
-      "Ohhaaayo", "Emersons", "Yammito", "SNIXCED", "LegedaryForigeb", "BAVGUNNER",
-      "Kokosmos", "FoOrty", "Bembel", "RakovaiVixyxol", "Pavvvvel", "ТурбоТанкер",
-      "MaeSTRaG", "Talos_O", "Sosiska_killeru", "Cid_Kageno", "GRUZOPEREVOZKA",
-      "MashVandet", "FELPYYYY", "Rkkqq", "ZXCBOCHKA", "Лелуш__Ламперуж", "hamerxxray",
-      "topormafii", "ValeraBanan", "Milkoos", "LLlmaLb", "Том_Грязный", "PVPabuser",
+      "Ohhaaayo", "Emersons", "Yammito", "SNIXCED", "LegedaryForigeb",
+      "BAVGUNNER", "Kokosmos", "FoOrty", "Bembel", "RakovaiVixyxol",
+      "Pavvvvel", "ТурбоТанкер", "MaeSTRaG", "Talos_O", "Sosiska_killeru",
+      "Cid_Kageno", "GRUZOPEREVOZKA", "MashVandet", "FELPYYYY", "Rkkqq",
+      "ZXCBOCHKA", "Лелуш__Ламперуж", "hamerxxray", "topormafii",
+      "ValeraBanan", "Milkoos", "LLlmaLb", "Том_Грязный", "PVPabuser",
       "FedorBritva", "Andrey_Nifedov", "FuRySMiLe"
     ];
 
+    // Временные окна (МСК)
     const TIME_WINDOWS = [
-      { name: "ТЕСТ 23:12-23:15", start: "23:12", end: "23:15", days: [0] },
+      { name: "ТЕСТ 23:02-23:08", start: "23:02", end: "23:08", days: [1] },
       { name: "20:00-20:28", start: "20:00", end: "20:28", days: [4, 5, 6, 0] },
       { name: "20:30-20:58", start: "20:30", end: "20:58", days: [4, 5, 6, 0] },
       { name: "21:00-21:28", start: "21:00", end: "21:28", days: [4, 5, 6, 0] }
     ];
 
-    // ===== ИСПОЛЬЗУЕМ ПОСТОЯННОЕ ХРАНИЛИЩЕ =====
+    // Подключаем хранилище
     const store = getStore('grenade-monitor-store');
     
-    // Текущее время
+    // Получаем текущее время (МСК)
     const now = new Date();
     const mskTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
     const currentHour = String(mskTime.getHours()).padStart(2, '0');
@@ -37,7 +40,7 @@ export default async (request) => {
     const currentTime = `${currentHour}:${currentMinute}`;
     const currentDay = mskTime.getDay();
 
-    // Определяем окно
+    // Проверяем, входит ли в окно
     const currentWindow = TIME_WINDOWS.find(w =>
       w.days.includes(currentDay) &&
       w.start <= currentTime &&
@@ -50,79 +53,61 @@ export default async (request) => {
       }));
     }
 
-    // Получаем статистику игроков через правильный эндпоинт
-const stats = {};
-for (const player of PLAYERS) {
-  try {
-    // Пробуем разные варианты эндпоинтов
-    let response = null;
-    let data = null;
+    // ПОЛУЧАЕМ СТАТИСТИКУ (исправленная версия)
+    console.log(`🎯 Окно: ${currentWindow.name}`);
+    const stats = {};
     
-    // Вариант 1: Основной эндпоинт для профиля
-    const url1 = `https://eapi.stalcraft.net/${CONFIG.region}/character/${encodeURIComponent(player)}/profile`;
-    response = await fetch(url1, {
-      headers: {
-        'Client-Id': CONFIG.clientId,
-        'Client-Secret': CONFIG.clientSecret
-      }
-    });
-    
-    if (response.ok) {
-      data = await response.json();
-    } else {
-      // Вариант 2: Запасной вариант
-      const url2 = `https://eapi.stalcraft.net/${CONFIG.region}/character/${encodeURIComponent(player)}`;
-      response = await fetch(url2, {
-        headers: {
-          'Client-Id': CONFIG.clientId,
-          'Client-Secret': CONFIG.clientSecret
+    for (const player of PLAYERS) {
+      try {
+        const url = `https://eapi.stalcraft.net/${CONFIG.region}/character/${encodeURIComponent(player)}`;
+        const response = await fetch(url, {
+          headers: {
+            'Client-Id': CONFIG.clientId,
+            'Client-Secret': CONFIG.clientSecret
+          }
+        });
+        
+        if (!response.ok) {
+          console.log(`❌ ${player}: HTTP ${response.status}`);
+          stats[player] = 0;
+          continue;
         }
-      });
-      if (response.ok) {
-        data = await response.json();
+        
+        const data = await response.json();
+        
+        // Ищем gre-thr в stats (как в Python скрипте)
+        let greThr = 0;
+        if (data?.stats && Array.isArray(data.stats)) {
+          const stat = data.stats.find(s => s.id === 'gre-thr');
+          greThr = stat?.value || 0;
+          console.log(`✅ ${player}: gre-thr = ${greThr}`);
+        } else {
+          console.log(`⚠️ ${player}: нет stats, данные:`, Object.keys(data));
+        }
+        
+        stats[player] = greThr;
+        
+      } catch (error) {
+        console.error(`❌ ${player}: ${error.message}`);
+        stats[player] = 0;
       }
     }
-    
-    // Извлекаем статистику гранат
-    let greThr = 0;
-    if (data?.statistics) {
-      // statistics может быть массивом или объектом
-      if (Array.isArray(data.statistics)) {
-        const stat = data.statistics.find(s => s?.id === 'gre-thr' || s?.statId === 'gre-thr');
-        greThr = stat?.value || stat?.statValue || 0;
-      } else if (typeof data.statistics === 'object') {
-        greThr = data.statistics['gre-thr'] || data.statistics.gre_thr || 0;
-      }
-    }
-    
-    stats[player] = greThr;
-    console.log(`✅ ${player}: ${greThr}`);
-    
-  } catch (error) {
-    console.error(`❌ ${player}: ${error.message}`);
-    stats[player] = 0;
-  }
-}
 
-    // ===== ЗАГРУЖАЕМ СОСТОЯНИЕ ИЗ ХРАНИЛИЩА =====
+    // Загружаем состояние из хранилища
     let state = await store.get('state', { type: 'json' }) || {
       baseline: {},
-      currentWindow: null,
-      firstRun: true
+      currentWindow: null
     };
 
-    // Если новое окно или первый запуск
+    // Если это первый запуск в окне
     if (state.currentWindow !== currentWindow.name || Object.keys(state.baseline).length === 0) {
       state.baseline = stats;
       state.currentWindow = currentWindow.name;
-      state.firstRun = false;
-      
-      // Сохраняем в хранилище
       await store.setJSON('state', state);
       
       return new Response(JSON.stringify({ 
         message: `📝 Первый запуск в окне ${currentWindow.name}, базовые значения сохранены`,
-        time: currentTime
+        baseline: stats
       }));
     }
 
@@ -131,17 +116,51 @@ for (const player of PLAYERS) {
     for (const [player, current] of Object.entries(stats)) {
       const baseline = state.baseline[player] || 0;
       const diff = current - baseline;
-      if (diff > 0) changes.push({ player, diff });
+      if (diff > 0) {
+        changes.push({ player, diff });
+      }
     }
     changes.sort((a, b) => b.diff - a.diff);
 
-    // Если конец окна - отправляем отчёт
+    // ФОРМИРУЕМ ОТЧЕТ СО ВСЕМИ ИГРОКАМИ
+    const allPlayers = PLAYERS.sort();
+    let reportText = `**📊 ИТОГИ ЗА ${currentWindow.name}**\n\n**Брошено гранат:**\n`;
+    let total = 0;
+
+    for (const player of allPlayers) {
+      const change = changes.find(c => c.player === player);
+      const diff = change?.diff || 0;
+      total += diff;
+      
+      // Определяем эмодзи
+      let emoji = "⚫";
+      if (changes.length > 0 && changes[0]?.player === player) emoji = "🥇";
+      else if (changes.length > 1 && changes[1]?.player === player) emoji = "🥈";
+      else if (changes.length > 2 && changes[2]?.player === player) emoji = "🥉";
+      else if (diff > 100) emoji = "🟢";
+      else if (diff >= 50) emoji = "🟡";
+      else if (diff > 0) emoji = "🔴";
+      
+      reportText += `${emoji} **${player}**: ${diff} шт.\n`;
+    }
+
+    reportText += `\n**Всего брошено:** ${total} гранат`;
+
+    // Добавляем топ-3 если есть
+    if (changes.length > 0) {
+      reportText += `\n\n**🏆 Топ-3:**\n`;
+      for (let i = 0; i < Math.min(3, changes.length); i++) {
+        const medal = ["🥇", "🥈", "🥉"][i];
+        reportText += `${medal} ${changes[i].player}: ${changes[i].diff} шт.\n`;
+      }
+    }
+
+    // Если это конец окна - отправляем отчёт
     if (currentTime === currentWindow.end) {
-      // Отправляем в Discord
       const embed = {
         title: `💣 Отчёт за ${currentWindow.name}`,
         color: changes.length > 0 ? 0x00FF00 : 0x808080,
-        description: formatReport(currentWindow.name, changes),
+        description: reportText,
         footer: { text: `🕐 ${currentTime} МСК` }
       };
 
@@ -163,7 +182,8 @@ for (const player of PLAYERS) {
     // Промежуточный запуск
     return new Response(JSON.stringify({ 
       message: `⏳ Мониторинг (${currentTime})`,
-      changes: changes.length
+      changes: changes.length,
+      total: total
     }));
 
   } catch (error) {
@@ -171,38 +191,3 @@ for (const player of PLAYERS) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
-
-// Функция форматирования отчёта
-function formatReport(windowName, changes) {
-  if (changes.length === 0) {
-    return "За этот период никто не бросал гранаты.";
-  }
-  
-  let text = `**📊 ИТОГИ ЗА ${windowName}**\n\n**Брошено гранат:**\n`;
-  let total = 0;
-  
-  changes.forEach((c, i) => {
-    total += c.diff;
-    let emoji = "⚫";
-    if (i === 0) emoji = "🥇";
-    else if (i === 1) emoji = "🥈";
-    else if (i === 2) emoji = "🥉";
-    else if (c.diff > 100) emoji = "🟢";
-    else if (c.diff >= 50) emoji = "🟡";
-    else if (c.diff > 0) emoji = "🔴";
-    
-    text += `${emoji} **${c.player}**: ${c.diff} шт.\n`;
-  });
-  
-  text += `\n**Всего брошено:** ${total} гранат`;
-  
-  if (changes.length >= 3) {
-    text += `\n\n**🏆 Топ-3:**\n`;
-    for (let i = 0; i < 3; i++) {
-      const medal = ["🥇", "🥈", "🥉"][i];
-      text += `${medal} ${changes[i].player}: ${changes[i].diff} шт.\n`;
-    }
-  }
-  
-  return text;
-}
